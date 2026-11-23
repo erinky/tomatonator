@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>tomatonator | throw tomatoes at IC</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍅</text></svg>" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+  html { font-family:"Comic Sans MS","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif; letter-spacing:1px; overflow:hidden; }
+  body { min-height:100vh; background:rgb(237,237,255); color:#222; }
+  #stage { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; overflow:hidden; padding:.5rem; }
+  #stage h1 { font-size:3rem; } #stage h2 { font-size:1.1rem; font-weight:400; margin-top:.5rem; opacity:.7; }
+  #target { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:none; -webkit-user-drag:none; z-index:1; display:none; }
+  .has-image h1, .has-image h2 { display:none; }
+  .has-image #target { display:block; }
+  #fx { position:fixed; inset:0; pointer-events:none; z-index:50; overflow:hidden; }
+  .flying { position:absolute; line-height:1; will-change:transform; }
+  .splat { position:absolute; pointer-events:none; transform-origin:center; }
+  .splat.dissolve { animation:dissolve 1.2s ease forwards; }
+  @keyframes dissolve { to { opacity:0; transform:translateY(40px) scale(1.05); filter:blur(4px); } }
+  .splat .drip { transform-box:fill-box; transform-origin:top; animation:drip 2.2s cubic-bezier(.3,.1,.5,1) forwards; }
+  @keyframes drip { from { transform:scaleY(.05); } to { transform:scaleY(1); } }
+
+  #who { position:fixed; top:12px; left:14px; z-index:85; display:flex; gap:8px; align-items:center; font-weight:600; font-size:.9rem; color:#444; }
+  #who input { width:130px; padding:.35em .6em; font:inherit; border:2px solid #e63946; border-radius:8px; background:#fff; color:#222; user-select:text; -webkit-user-select:text; }
+  #hud { position:fixed; top:14px; left:0; right:0; z-index:80; text-align:center; pointer-events:none; }
+  #total { font-size:1.6rem; font-weight:700; color:#b00d1a; }
+  #warrior { margin-top:4px; font-size:1rem; font-weight:600; color:#444; }
+  #settings input[type=text] { padding:.5em .8em; font:inherit; border:2px solid #e63946; border-radius:8px; user-select:text; -webkit-user-select:text; }
+  #options { position:fixed; bottom:20px; right:25px; z-index:100; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+  button, .btn { display:inline-block; padding:.6em 1.2em; font-size:1rem; font-family:inherit; font-weight:600; color:#fff; background:#e63946; border:none; border-radius:8px; cursor:pointer; text-decoration:none; transition:background .2s, transform .1s; }
+  button:hover, .btn:hover { background:#db5252; }
+  button:active, .btn:active { transform:scale(.95); }
+  .disabled { opacity:.4; pointer-events:none; filter:grayscale(1); }
+  .hidden { display:none !important; }
+  input[type=checkbox] { appearance:none; -webkit-appearance:none; display:none; }
+  .ticker:checked + .btn { background:#4cb82e; }
+
+  #rooms { position:fixed; inset:0; z-index:95; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; background:rgba(237,237,255,.97); }
+  #rooms.open { display:flex; }
+  #roomList { display:grid; grid-template-columns:repeat(2,minmax(140px,220px)); gap:14px; }
+  #roomList button { padding:0; overflow:hidden; background:#fff; color:#222; text-align:center; box-shadow:0 2px 8px #0003; }
+  #roomList button.cur { outline:3px solid #4cb82e; }
+  #roomList img { display:block; width:100%; height:120px; object-fit:cover; background:#ddd; }
+  #roomList span { display:block; padding:.5em; }
+  #settings { position:fixed; inset:0; z-index:90; display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:rgba(237,237,255,.96); }
+  #settings.open { display:flex; }
+  #settings .row { display:flex; gap:12px; align-items:center; }
+  #settings input[type=range] { width:220px; accent-color:#e63946; }
+  #settings .off { opacity:.4; pointer-events:none; }
+  body.throwing, body.throwing * { cursor:crosshair !important; }
+  body.throwing #options, body.throwing #options * { cursor:pointer !important; }
+</style>
+</head>
+<body>
+<div id="hud"><div id="total">total tomato on <span id="roomName">IC</span> : <b id="totalN">0</b></div><div id="warrior">🏆 tomatowarrior: <b id="warName">---</b> (<span id="warN">0</span>)</div></div>
+<div id="who"><label for="nameIn">your name</label><input type="text" id="nameIn" maxlength="20" placeholder="anonymous" /></div>
+<div id="stage">
+  <h1>hi guys 🍅</h1>
+  <h2>pick a room, then throw tomatoes</h2>
+  <img id="target" alt="" />
+</div>
+<svg width="0" height="0" style="position:absolute"><defs>
+ <radialGradient id="tomBody" cx="35%" cy="32%" r="75%"><stop offset="0" stop-color="#ff7a5c"/><stop offset=".3" stop-color="#e8321f"/><stop offset=".7" stop-color="#b3130d"/><stop offset="1" stop-color="#620605"/></radialGradient>
+ <radialGradient id="tomShade" cx="50%" cy="50%" r="55%"><stop offset=".72" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#2a0000" stop-opacity=".5"/></radialGradient>
+ <radialGradient id="splatBody" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#e03a3a"/><stop offset=".6" stop-color="#c3151f"/><stop offset="1" stop-color="#9c0c14"/></radialGradient>
+ <filter id="tomBlur"><feGaussianBlur stdDeviation="2"/></filter>
+ <filter id="splatRough" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="10"/></filter>
+</defs></svg>
+<div id="fx"></div>
+
+<div id="options">
+  <button id="settingsBtn">settings</button>
+  <button id="roomBtn">go to the room</button>
+  <button id="throwBtn">throw tomato &gt;:)</button>
+  <button id="hideBtn">hide buttons</button>
+</div>
+
+<div id="rooms"><h2>pick a room</h2><div id="roomList"></div><button id="roomsClose">close</button></div>
+
+<div id="settings">
+  <div class="row">
+    <input type="checkbox" id="randomize" class="ticker" /><label for="randomize" class="btn">randomize</label>
+    <div class="row" id="sizeRow"><input type="range" id="size" min="1" max="300" value="70" /><label for="size">tomato size</label></div>
+  </div>
+  <div class="row"><input type="checkbox" id="autoWipe" class="ticker" checked /><label for="autoWipe" class="btn">auto wipe splats</label></div>
+  <div class="row"><button id="wipeNow">wipe now</button><button id="backBtn">back</button></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const stage = $('stage'), img = $('target'), fx = $('fx'), opts = $('options');
+let throwing = false, hidden = false;
+const S = { size: 70, random: false, wipe: true };
+
+/* ---------- 사진 로드 ---------- */
+function setImage(src) {
+  img.src = src;
+  stage.classList.add('has-image');
+}
+/* ---------- 버튼/설정 ---------- */
+$('throwBtn').onclick = () => {
+  throwing = !throwing;
+  document.body.classList.toggle('throwing', throwing);
+  $('throwBtn').textContent = throwing ? 'ceasefire' : 'throw tomato >:)';
+};
+$('hideBtn').onclick = () => {
+  hidden = !hidden;
+  [...opts.children].forEach(el => { if (el !== $('hideBtn')) el.classList.toggle('hidden', hidden); });
+  $('hideBtn').textContent = hidden ? 'show buttons' : 'hide buttons';
+};
+$('settingsBtn').onclick = () => $('settings').classList.add('open');
+$('backBtn').onclick = () => $('settings').classList.remove('open');
+$('size').oninput = e => S.size = +e.target.value;
+$('randomize').onchange = e => { S.random = e.target.checked; $('sizeRow').classList.toggle('off', S.random); };
+$('autoWipe').onchange = e => { S.wipe = e.target.checked; if (S.wipe) wipeAll(); };
+$('wipeNow').onclick = wipeAll;
+function wipeAll() { fx.querySelectorAll('.splat').forEach(dissolve); }
+function dissolve(el) { el.classList.add('dissolve'); el.addEventListener('animationend', ev => { if (ev.animationName === 'dissolve') el.remove(); }); }
+
+/* ---------- 사운드 (WebAudio로 합성) ---------- */
+let ac;
+function splatSound(vol = 1) {
+  ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+  const t = ac.currentTime, dur = .35;
+  const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+  const n = ac.createBufferSource(); n.buffer = buf;
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2500, t); lp.frequency.exponentialRampToValueAtTime(300, t + dur);
+  const g = ac.createGain(); g.gain.value = .8 * vol;
+  n.connect(lp).connect(g).connect(ac.destination); n.start(t);
+  const o = ac.createOscillator(), og = ac.createGain();
+  o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(40, t + .18);
+  og.gain.setValueAtTime(.9 * vol, t); og.gain.exponentialRampToValueAtTime(.001, t + .2);
+  o.connect(og).connect(ac.destination); o.start(t); o.stop(t + .25);
+}
+
+/* ---------- 토마토 날리기 + 터지는 효과 ---------- */
+const rnd = (a, b) => a + Math.random() * (b - a);
+function blob(r, n = 18) {
+  const pts = Array.from({ length: n }, (_, i) => {
+    const a = i / n * Math.PI * 2, rr = r * (Math.random() < .25 ? rnd(1.05, 1.4) : rnd(.7, 1.05));
+    return [Math.cos(a) * rr, Math.sin(a) * rr];
+  });
+  const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  let d = `M${mid(pts[n - 1], pts[0])}`;
+  pts.forEach((p, i) => { const m = mid(p, pts[(i + 1) % n]); d += ` Q${p} ${m}`; });
+  return d + 'Z';
+}
+function makeSplat(x, y, r) {
+  const W = r * 5, c = W / 2, ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'splat'); svg.setAttribute('width', W); svg.setAttribute('height', W * 1.8);
+  svg.setAttribute('viewBox', `${-c} ${-c} ${W} ${W * 1.8}`);
+  svg.style.left = x - c + 'px'; svg.style.top = y - c + 'px'; svg.style.overflow = 'visible';
+  svg.style.mixBlendMode = 'multiply';            // 사진 질감이 비쳐 보이게
+  const add = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const g = add('g', { filter: 'url(#splatRough)' });
+  const rot = rnd(0, 360), R = `rotate(${rot})`;
+  // 가장자리 얇은 즙 번짐 → 본체 → 진한 중심
+  add('path', { d: blob(r * 1.55, 22), fill: '#c4343a', opacity: .45, transform: R }, g);
+  add('path', { d: blob(r * 1.15, 20), fill: 'url(#splatBody)', opacity: .92, transform: R }, g);
+  add('path', { d: blob(r * .6, 12), fill: '#8a0a10', opacity: .55, transform: `rotate(${rnd(0,360)})` }, g);
+  // 튀는 방울 (거리별 크기 감소)
+  for (let i = 0; i < 26; i++) {
+    const a = rnd(0, 6.28), dist = r * rnd(1.3, 2.7), rr = r * rnd(.025, .14) * (1.6 - dist / (r * 2.7));
+    add('ellipse', { cx: Math.cos(a) * dist, cy: Math.sin(a) * dist, rx: rr * rnd(1, 1.7), ry: rr, transform: `rotate(${a * 57},${Math.cos(a) * dist},${Math.sin(a) * dist})`, fill: '#b5121b', opacity: .9 }, g);
+  }
+  // 흘러내리는 즙 (그라데이션 + 끝에 맺힌 방울)
+  for (let i = 0; i < 5; i++) {
+    const dx = rnd(-r * .9, r * .9), w = r * rnd(.07, .15), len = r * rnd(1, 3);
+    const grp = add('g', { class: 'drip' }, g);
+    add('rect', { x: dx - w / 2, y: 0, width: w, height: len, rx: w / 2, fill: '#b5121b', opacity: .9 }, grp);
+    add('ellipse', { cx: dx, cy: len, rx: w * .85, ry: w * 1.2, fill: '#a50d16' }, grp);
+    add('rect', { x: dx - w * .18, y: r * .3, width: w * .22, height: len * .7, rx: w * .1, fill: '#fff', opacity: .28 }, grp);
+    grp.style.animationDelay = rnd(0, .6) + 's';
+  }
+  // 씨앗 + 젤리 (노란 반투명)
+  const seeds = add('g', { filter: 'none' });
+  for (let i = 0; i < 9; i++) {
+    const a = rnd(0, 6.28), d = r * rnd(.1, 1.1), sx = Math.cos(a) * d, sy = Math.sin(a) * d, sa = rnd(0, 360);
+    add('circle', { cx: sx, cy: sy, r: r * .12, fill: '#f6c76a', opacity: .55 }, seeds);
+    add('ellipse', { cx: sx, cy: sy, rx: r * .065, ry: r * .04, transform: `rotate(${sa},${sx},${sy})`, fill: '#f7e9b0', stroke: '#d9b45a', 'stroke-width': r * .01 }, seeds);
+  }
+  // 과육 덩어리 + 껍질 조각
+  for (let i = 0; i < 6; i++) {
+    const a = rnd(0, 6.28), d = r * rnd(.4, 1.5);
+    add('path', { d: blob(r * rnd(.08, .2), 8), transform: `translate(${Math.cos(a) * d},${Math.sin(a) * d})`, fill: i < 3 ? '#e5392f' : '#c01a1c', opacity: .95 }, seeds);
+  }
+  // 젖은 광택 하이라이트
+  const gl = add('g', { opacity: .55 });
+  for (let i = 0; i < 6; i++) {
+    const a = rnd(0, 6.28), d = r * rnd(.1, .9);
+    add('ellipse', { cx: Math.cos(a) * d, cy: Math.sin(a) * d, rx: r * rnd(.08, .22), ry: r * rnd(.03, .07), transform: `rotate(${rnd(-40,40)},${Math.cos(a)*d},${Math.sin(a)*d})`, fill: '#fff', style: 'mix-blend-mode:screen' }, gl);
+  }
+  return svg;
+}
+const TOMATO_SVG = `<svg viewBox="0 0 100 100" width="100%" height="100%">
+ <ellipse cx="52" cy="92" rx="30" ry="4" fill="#000" opacity=".15" filter="url(#tomBlur)"/>
+ <path d="M50 14 C74 8 96 26 95 54 C94 78 74 94 50 93 C26 94 6 78 5 54 C4 26 26 8 50 14Z" fill="url(#tomBody)"/>
+ <path d="M50 14 C58 40 58 70 50 93" stroke="#8a0d0b" stroke-width="1.2" fill="none" opacity=".35"/>
+ <path d="M26 20 C14 38 14 68 28 88" stroke="#8a0d0b" stroke-width="1" fill="none" opacity=".25"/>
+ <path d="M75 20 C88 38 88 68 74 88" stroke="#8a0d0b" stroke-width="1" fill="none" opacity=".25"/>
+ <path d="M50 14 C74 8 96 26 95 54 C94 78 74 94 50 93 C26 94 6 78 5 54 C4 26 26 8 50 14Z" fill="url(#tomShade)"/>
+ <ellipse cx="32" cy="34" rx="12" ry="7" transform="rotate(-35 32 34)" fill="#fff" opacity=".7" filter="url(#tomBlur)"/>
+ <ellipse cx="27" cy="29" rx="3.5" ry="2" transform="rotate(-35 27 29)" fill="#fff" opacity=".95"/>
+ <g transform="translate(50 17)">
+  <path d="M0 0 C-4-9 -16-12 -26-6 C-18-4 -14 0 -10 3 C-18 6 -22 12 -22 12 C-12 10 -6 8 0 4Z" fill="#3f7a1f"/>
+  <path d="M0 0 C4-9 16-12 26-6 C18-4 14 0 10 3 C18 6 22 12 22 12 C12 10 6 8 0 4Z" fill="#4b8c26"/>
+  <path d="M0 0 C-3 8 -8 15 -14 17 C-6 16 0 12 2 6 C6 12 12 16 18 15 C10 12 6 6 4 0Z" fill="#356d19"/>
+  <path d="M0 0 C-2-6 -3-10 -2-13" stroke="#5a8f2e" stroke-width="3.2" stroke-linecap="round" fill="none"/>
+ </g></svg>`;
+function throwTomato(x, y) {
+  const r = (S.random ? rnd(15, 110) : S.size) * 0.8 + 10;
+  const fs = r * 1.9;
+  const t = document.createElement('div');
+  t.className = 'flying'; t.innerHTML = TOMATO_SVG; t.style.width = t.style.height = fs + 'px';
+  t.style.left = x - fs / 2 + 'px'; t.style.top = y - fs / 2 + 'px';
+  fx.appendChild(t);
+  const sx = innerWidth * rnd(.3, .7) - x, sy = innerHeight * .6, spin = rnd(500, 900) * (Math.random() < .5 ? -1 : 1);
+  const dur = 750;
+  t.animate([
+    { transform: `translate(${sx}px,${sy}px) scale(.12) rotate(0deg)`, opacity: .9 },
+    { transform: `translate(${sx * .3}px,${sy * -.08}px) scale(.65) rotate(${spin * .55}deg)`, offset: .62 },
+    { transform: `translate(0,0) scale(1.1) rotate(${spin}deg)` }
+  ], { duration: dur, easing: 'cubic-bezier(.3,.1,.8,.6)', fill: 'forwards' });
+  setTimeout(() => {
+    t.remove();
+    document.body.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${rnd(-5,5)}px,${rnd(-5,5)}px)` }, { transform: 'translate(0,0)' }], { duration: 120 });
+    const s = makeSplat(x, y, r);
+    fx.appendChild(s);
+    s.animate([{ transform: 'scale(.25)', opacity: .5 }, { transform: 'scale(1.12)', opacity: 1, offset: .3 }, { transform: 'scale(1)' }], { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    splatSound(Math.min(1, .4 + r / 120));
+    if (S.wipe) setTimeout(() => s.isConnected && dissolve(s), 5000);
+  }, dur);
+}
+
+/* ---------- rooms: edit names / image files here ---------- */
+const ROOMS = [
+  { name: 'IC',     img: 'room1.jpg' },
+  { name: 'the atrium', img: 'room2.jpg' },
+  { name: 'IC 130', img: 'room3.jpg' },
+  { name: 'IC 220', img: 'room4.jpg' },
+];
+let cur = 0;
+/* ---------- stats: total + tomatowarrior per room (saved in this browser) ---------- */
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+let store; try { store = JSON.parse(LS.get('tomatoStats2') || '{}'); } catch (e) { store = {}; }
+let me = LS.get('tomatoName') || '';
+const st = () => store[ROOMS[cur].name] || (store[ROOMS[cur].name] = { total: 0, by: {} });
+function renderStats() {
+  const d = st();
+  $('roomName').textContent = ROOMS[cur].name;
+  $('totalN').textContent = d.total.toLocaleString();
+  const top = Object.entries(d.by).sort((a, b) => b[1] - a[1])[0];
+  $('warName').textContent = top ? top[0] : '---';
+  $('warN').textContent = top ? top[1] : 0;
+}
+function countThrow() {
+  if (!me) me = 'anonymous';
+  const d = st(); d.total++; d.by[me] = (d.by[me] || 0) + 1;
+  LS.set('tomatoStats2', JSON.stringify(store));
+  renderStats();
+}
+$('nameIn').value = me;
+$('nameIn').onchange = e => { me = e.target.value.trim().slice(0, 20); LS.set('tomatoName', me); };
+
+function setRoom(i) {
+  cur = i; fx.innerHTML = '';
+  img.removeAttribute('src'); stage.classList.remove('has-image');
+  const probe = new Image();
+  probe.onload = () => setImage(ROOMS[i].img);
+  probe.src = ROOMS[i].img;
+  renderStats();
+}
+$('roomBtn').onclick = () => {
+  $('roomList').innerHTML = '';
+  ROOMS.forEach((r, i) => {
+    const b = document.createElement('button'); if (i === cur) b.className = 'cur';
+    b.innerHTML = `<img src="${r.img}" alt=""><span>${r.name}</span>`;
+    b.onclick = () => { setRoom(i); $('rooms').classList.remove('open'); };
+    $('roomList').appendChild(b);
+  });
+  $('rooms').classList.add('open');
+};
+$('roomsClose').onclick = () => $('rooms').classList.remove('open');
+setRoom(0);
+
+document.addEventListener('click', e => {
+  if (!throwing || e.target.closest('#options, #settings, #rooms, #who')) return;
+  countThrow();
+  throwTomato(e.clientX, e.clientY);
+});
+</script>
+</body>
+</html>
